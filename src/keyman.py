@@ -16,6 +16,12 @@ class KeyManager:
         private_key, public_key, jwk = keygen.create_key_pair()
         self.keys.append({"private_key": private_key, "public_key": public_key, "jwk": jwk, "exp": experation})
 
+    def all_valid_keys(self):
+        keys = []
+        for key in self.keys:
+            if key['exp'] > datetime.now(tz=UTC):
+                keys.append(key)
+        return keys
 
     def obtain_key(self, kid: str):
         '''

@@ -39,8 +39,10 @@ def jwks():
     # TODO: Get valid (non-expired) keys from key_manager
     # TODO: Convert to JWKS format
     
+    keylist = key_manager.all_valid_keys()
+
     keys = {
-        "keys": []
+        "keys": [k["jwk"] for k in keylist]
     }
     
     return jsonify(keys), 200
