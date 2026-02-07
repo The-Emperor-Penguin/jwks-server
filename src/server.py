@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
+import jwt
 import keyman
 import keygen
 
@@ -23,11 +24,22 @@ def auth():
     # Check if expired query parameter is present
     expired = request.args.get('expired', 'false').lower() == 'true'
     
-    # TODO: Get appropriate key (expired or valid)
-    # TODO: Sign JWT with the key
-    # TODO: Return JWT
+    #Expired JWT still needs to be done
     
-    return jsonify({"token": "placeholder-jwt-token"}), 200
+    payload = {
+        "sub": "user123",
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(minutes=5),
+    }
+
+    if not expired:
+        keydata = key_manager.newest_valid_key()
+    else:
+        keydata = key_manager.newest_expired_key()
+
+    token = jwt.encode(payload, keydata["private_key"], algorithm="RS256", headers={"kid": keydata["jwk"]["kid"]})
+
+    return jsonify({"token": token}), 200
 
 
 @app.route('/.well-known/jwks.json', methods=['GET'])
@@ -36,8 +48,6 @@ def jwks():
     JWKS endpoint that serves public keys in JWKS format.
     Only serves keys that have not expired.
     """
-    # TODO: Get valid (non-expired) keys from key_manager
-    # TODO: Convert to JWKS format
     
     keylist = key_manager.all_valid_keys()
 

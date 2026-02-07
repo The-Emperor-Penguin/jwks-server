@@ -9,3 +9,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# files that shouldn't be uploaded
+gradebot
