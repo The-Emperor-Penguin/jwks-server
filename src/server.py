@@ -29,12 +29,13 @@ def auth():
     payload = {
         "sub": "user123",
         "iat": datetime.now(UTC),
-        "exp": datetime.now(UTC) + timedelta(minutes=5),
     }
 
     if not expired:
+        payload["exp"] = datetime.now(UTC) + timedelta(minutes=5)
         keydata = key_manager.newest_valid_key()
     else:
+        payload["exp"] = datetime.now(UTC) - timedelta(minutes=5)
         keydata = key_manager.newest_expired_key()
 
     token = jwt.encode(payload, keydata["private_key"], algorithm="RS256", headers={"kid": keydata["jwk"]["kid"]})
