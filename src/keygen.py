@@ -5,8 +5,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 
 def create_key_pair():
-    """The Experation date must be in UTC or will be converted to UTC
-    """
 
     EXPONENT = 65537
 
@@ -39,8 +37,3 @@ def create_key_pair():
     }
 
     return (private_key, public_key, jkw)
-
-
-
-if __name__ == "__main__":
-    create_key_pair()
