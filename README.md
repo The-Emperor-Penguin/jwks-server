@@ -19,4 +19,4 @@ There however is not much to test in the function as all it does is return keys 
 
 ## Grading
 There appears to have been an issue in the gradebot as it was not authorized to connect to the server. Other than that I recieved all marks.
-!(Image showing the points awarded 15, 5, 10, 20, 5, 10, 0, respetivly for a grade of 76.47%)[testClient.png]
+![Image showing the points awarded 15, 5, 10, 20, 5, 10, 0, respetivly for a grade of 76.47%](testClient.png)
