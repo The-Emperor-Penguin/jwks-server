@@ -39,6 +39,9 @@ def auth():
         payload["exp"] = datetime.now(UTC) - timedelta(minutes=5)
         keydata = key_manager.newest_expired_key()
 
+    if not keydata:
+        return jsonify({"error": "no keys are available"}) ,400
+
     token = jwt.encode(payload, keydata["private_key"], algorithm="RS256", headers={"kid": keydata["jwk"]["kid"]})
 
     return jsonify({"token": token}), 200
@@ -52,6 +55,8 @@ def jwks():
     """
     
     keylist = key_manager.all_valid_keys()
+    if len(keylist) == 0:
+        return jsonify({"error": "no valid keys available"}), 400
 
     keys = {
         "keys": [k["jwk"] for k in keylist]
