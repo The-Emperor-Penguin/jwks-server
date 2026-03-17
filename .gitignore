@@ -13,3 +13,8 @@ wheels/
 
 # files that shouldn't be uploaded
 gradebot
+
+# ensure that .env is never included
+*.env
+# Ensure database is never uploaded
+*.db
