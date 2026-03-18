@@ -13,10 +13,10 @@ python src/server.py
 ```
 
 ## Unit Tests
-There is about 96% of the code covered currently by unit test. The only section of code that isn't covered by tests currently is the key gen
+There is about 97% of the code covered currently by unit test. The only section of code that isn't covered by tests currently is the key gen
 There however is not much to test in the function as all it does is return keys that was generated.
 ![Test Coverage Total 96%](TestCoverage.png)
 
 ## Grading
-There appears to have been an issue in the gradebot as it was not authorized to connect to the server. Other than that I recieved all marks.
+
 ![Image showing the points awarded 15, 5, 10, 20, 5, 10, 0, respetivly for a grade of 76.47%](testClient.png)
