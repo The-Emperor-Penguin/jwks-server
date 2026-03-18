@@ -1,4 +1,3 @@
-import uuid
 import base64
 import sqlite3
 import os
@@ -13,31 +12,23 @@ from dotenv import load_dotenv
 
 
 class KeyManager:
-    __instance = None
 
-    def __new__(cls, *args, **kwargs):
-        if cls.__instance is None:
-            # Create a new instance using the superclass's __new__
-            cls.__instance = super(KeyManager, cls).__new__(cls)
-            # You can add initial configuration here if needed
-        return cls.__instance
-
-    def __init__(self, conn: sqlite3.Connection):
-        if not hasattr(self, 'conn'):
-            load_dotenv()
-            self.keypassword = os.getenv("KEYPASSWORD")
-            self.conn = conn
-            self.cursor = self.conn.cursor()
-            self.cursor.execute('''CREATE TABLE IF NOT EXISTS keys(
+    def __init__(self):
+        """Initialize environment-backed settings and ensure the keys table exists."""
+        load_dotenv()
+        self.databasepath =  os.getenv("DATABASENAME")
+        self.keypassword = os.getenv("KEYPASSWORD")
+        # Store encrypted private keys and expiration timestamps in SQLite.
+        with sqlite3.connect(self.databasepath) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS keys(
                 kid INTEGER PRIMARY KEY AUTOINCREMENT,
                 key BLOB NOT NULL,
-                exp INTEGER NOT NULL,
-                crt INTEGER NOT NULL
+                exp INTEGER NOT NULL
                 )''')
-        else:
-            print("Warning the key manager singleton was created twice, there may be an error.")
-        
+
     def create_key_pair(self):
+        """Generate an RSA key pair and return both keys plus a public JWK payload."""
 
         EXPONENT = 65537
 
@@ -53,17 +44,13 @@ class KeyManager:
         exponent = numbers.e
         mod = numbers.n
 
-        def _int_to_base64url(value: int) -> str:
-            byte_len = (value.bit_length() + 7) // 8 or 1
-            raw = value.to_bytes(byte_len, "big")
-            return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
-
         jkw = {
             "kty": "RSA",
             "alg": "RS256",
             "use": "sig",
-            "e": _int_to_base64url(exponent),
-            "n": _int_to_base64url(mod),
+            # JWKS requires base64url-encoded RSA public numbers.
+            "e": self._int_to_base64url(exponent),
+            "n": self._int_to_base64url(mod),
         }
 
         return (private_key, public_key, jkw)
@@ -79,44 +66,73 @@ class KeyManager:
             raise IOError
 
         private_key, public_key, jwk = self.create_key_pair()
+        # Persist only the encrypted private key; public JWK is derived when needed.
         serial = private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8,encryption_algorithm=serialization.BestAvailableEncryption(self.keypassword.encode("utf-8")))
-
-        self.cursor.execute("INSERT INTO keys (key, exp, crt) VALUES (?, ?, ?)", (serial,experation.timestamp(), datetime.now(UTC).timestamp(),))
-        self.conn.commit()
-        kid = self.cursor.lastrowid
-        jwk['kid'] = kid
+        with sqlite3.connect(self.databasepath) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO keys (key, exp) VALUES (?, ?)", (serial,int(experation.timestamp()),))
+            conn.commit()
+            kid = cursor.lastrowid
+        jwk['kid'] = str(kid)
         return (public_key, jwk)
+
+    @staticmethod
+    def _int_to_base64url(value: int) -> str:
+        """Convert an integer to unpadded base64url text for JWK numeric fields."""
+        # Remove '=' padding to produce RFC 7517-compatible base64url values.
+        byte_len = (value.bit_length() + 7) // 8 or 1
+        raw = value.to_bytes(byte_len, "big")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    def key_row_to_jwk(self, row):
+        """Convert a database key row into its public JWKS representation."""
+        # Rebuild the public JWK from the stored private key row.
+        kid, key_blob, _exp = row
+        private_key = serialization.load_pem_private_key(
+            key_blob,
+            self.keypassword.encode("utf-8")
+        )
+        numbers = private_key.public_key().public_numbers()
+        return {
+            "kty": "RSA",
+            "alg": "RS256",
+            "use": "sig",
+            "e": self._int_to_base64url(numbers.e),
+            "n": self._int_to_base64url(numbers.n),
+            "kid": str(kid),
+        }
 
     def all_valid_keys(self):
         '''
         This provides a list of all valid keys that are in the manager.
         '''
-
-        res = self.cursor.execute("SELECT * FROM keys WHERE exp > ?", (datetime.now(UTC).timestamp(),))
+        with sqlite3.connect(self.databasepath) as conn:
+            cursor = conn.cursor()
+            res = cursor.execute(
+                # Newest key first so signing/selection is deterministic.
+                "SELECT * FROM keys WHERE exp > ? ORDER BY kid DESC",
+                (int(datetime.now(UTC).timestamp()),)
+            )
         keys = res.fetchall()
         return keys
 
-    def newest_valid_key(self):
+    def valid_key(self):
+        """Return the newest non-expired key row, or an empty dict if none exist."""
         valid_keys = self.all_valid_keys()
         if not valid_keys:
             return {}
-        return max(valid_keys, key=lambda row: row[3])
+        return valid_keys[0]
     
-    def newest_expired_key(self):
-        expired_keys = self.cursor.execute("SELECT * FROM keys WHERE exp <= ?", (datetime.now(UTC).timestamp(),))
+    def expired_key(self):
+        """Return the newest expired key row, or an empty dict if none exist."""
+        with sqlite3.connect(self.databasepath) as conn:
+            cursor = conn.cursor()
+            res = cursor.execute(
+                "SELECT * FROM keys WHERE exp <= ? ORDER BY kid DESC",
+                (int(datetime.now(UTC).timestamp()),)
+            )
+            expired_keys = res.fetchall()
         if not expired_keys:
             return {}
-        return max(expired_keys, key=lambda row: row[3])
+        return expired_keys[0]
 
-if __name__ == "__main__":
-    import time
-    print("Running")
-    conn = sqlite3.connect("totally_not_my_privateKeys.db")
-    key_manager = KeyManager(conn)
-    key_manager.create_key(datetime.now(UTC) + timedelta(hours=1))
-    time.sleep(3)
-    key_manager.create_key(datetime.now(UTC) + timedelta(hours=1))
-    print(key_manager.newest_valid_key())
-    time.sleep(3)
-    key_manager.create_key(datetime.now(UTC) + timedelta(hours=1))
-    print(key_manager.all_valid_keys())

@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import sys
 import unittest
 from datetime import datetime, timedelta, UTC
@@ -16,7 +17,9 @@ import server
 
 class ServerTests(unittest.TestCase):
     def setUp(self):
-        server.key_manager.keys.clear()
+        with sqlite3.connect(server.key_manager.databasepath) as conn:
+            conn.execute("DELETE FROM keys")
+            conn.commit()
         now = datetime.now(UTC)
         server.key_manager.create_key(now + timedelta(hours=1))
         server.key_manager.create_key(now - timedelta(hours=1), debug=True)
@@ -36,7 +39,7 @@ class ServerTests(unittest.TestCase):
         self.assertGreater(exp_ts, int(datetime.now(UTC).timestamp()))
 
         header = jwt.get_unverified_header(token)
-        valid_kids = {k["jwk"]["kid"] for k in server.key_manager.all_valid_keys()}
+        valid_kids = {str(k[0]) for k in server.key_manager.all_valid_keys()}
         self.assertIn(header["kid"], valid_kids)
 
     def test_auth_expired_true_uses_expired_key(self):
@@ -53,7 +56,7 @@ class ServerTests(unittest.TestCase):
         self.assertLess(exp_ts, int(datetime.now(UTC).timestamp()))
 
         header = jwt.get_unverified_header(token)
-        expired_kid = server.key_manager.newest_expired_key()["jwk"]["kid"]
+        expired_kid = str(server.key_manager.expired_key()[0])
         self.assertEqual(header["kid"], expired_kid)
 
         jwks = self.client.get("/.well-known/jwks.json").json["keys"]
@@ -65,7 +68,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         keys = response.json["keys"]
 
-        expected_kids = {k["jwk"]["kid"] for k in server.key_manager.all_valid_keys()}
+        expected_kids = {str(k[0]) for k in server.key_manager.all_valid_keys()}
         actual_kids = {k["kid"] for k in keys}
         self.assertSetEqual(actual_kids, expected_kids)
 
