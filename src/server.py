@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 import jwt
 import os
 import keyman
+import userman
 from datetime import datetime, timedelta, UTC
 from cryptography.hazmat.primitives import serialization
 
@@ -17,7 +18,7 @@ app = Flask(__name__) # * sets up flask
 key_manager = keyman.KeyManager()
 key_manager.create_key(datetime.now() + timedelta(hours=1))  # Valid key
 key_manager.create_key(datetime.now() - timedelta(hours=1), debug=True)  # Expired key
-
+user_management = userman.userman()
 
 
 @app.route('/auth', methods=['POST']) # * declares the path and method call for this function
@@ -31,10 +32,8 @@ def auth():
     
     #Expired JWT still needs to be done
     
-    payload = {
-        "sub": "user123",
-        "iat": datetime.now(UTC),
-    }
+    payload = request.get_json()
+    
 
     if not expired:
         payload["exp"] = datetime.now(UTC) + timedelta(minutes=5)
@@ -74,6 +73,14 @@ def jwks():
 
     return jsonify(keys), 200
 
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    password = user_management.create_user(data['username'], data['email'])
+    if password != "":
+        return jsonify({'password': password}), 201
+    else:
+        return jsonify({'password': password}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True) # * runs flask if this file is being ran directly
