@@ -3,6 +3,7 @@ import jwt
 import os
 import keyman
 import userman
+from logger import AuthLog
 from datetime import datetime, timedelta, UTC
 from cryptography.hazmat.primitives import serialization
 
@@ -14,11 +15,11 @@ from cryptography.hazmat.primitives import serialization
 
 app = Flask(__name__) # * sets up flask
 # Initialize the key manager with one valid key and one expired key
-
+logger = AuthLog()
 key_manager = keyman.KeyManager()
 key_manager.create_key(datetime.now() + timedelta(hours=1))  # Valid key
 key_manager.create_key(datetime.now() - timedelta(hours=1), debug=True)  # Expired key
-user_management = userman.userman()
+user_management = userman.UserMan()
 
 
 @app.route('/auth', methods=['POST']) # * declares the path and method call for this function
@@ -27,6 +28,8 @@ def auth():
     Authentication endpoint that issues JWTs.
     If ?expired=true is present, issues a JWT signed with an expired key.
     """
+    ip = request.remote_addr
+    uid = -1
     # Check if expired query parameter is present
     expired = request.args.get('expired', 'false').lower() == 'true'
     
@@ -34,6 +37,11 @@ def auth():
     
     payload = request.get_json()
     
+    username = payload.get('username')
+    try:
+        uid = user_management.get_UID(username=username)
+    except ValueError:
+        return jsonify({}), 400
 
     if not expired:
         payload["exp"] = datetime.now(UTC) + timedelta(minutes=5)
@@ -51,18 +59,24 @@ def auth():
     )
     kid = str(keydata[0])
 
+
+    if uid != -1:
+        logger.logAuth(uid, ip)
+    else:
+        return jsonify({}), 500
+    
     token = jwt.encode(payload, private_key, algorithm="RS256", headers={"kid": kid})
 
     return jsonify({"token": token}), 200
 
 
-@app.route('/.well-known/jwks.json', methods=['GET']) # * Declares the path and method required for the function to run
+@app.route('/.well-known/jwks.json', methods=['GET']) # Declares the path and method required for the function to run
 def jwks():
     """
     JWKS endpoint that serves public keys in JWKS format.
     Only serves keys that have not expired.
     """
-    
+
     keylist = key_manager.all_valid_keys()
     if len(keylist) == 0:
         return jsonify({"error": "no valid keys available"}), 400
@@ -83,4 +97,4 @@ def register():
         return jsonify({'password': password}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080, debug=True) # * runs flask if this file is being ran directly
+    app.run(host='0.0.0.0', port=8080, debug=True) # runs flask if this file is being ran directly

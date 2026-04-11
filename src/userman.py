@@ -1,11 +1,11 @@
-import sqlite3
-import uuid
 import os
+import uuid
+import sqlite3
+from datetime import datetime, UTC
 from dotenv import load_dotenv
 from argon2 import PasswordHasher
-from datetime import datetime, UTC
 
-class userman:
+class UserMan:
     def __init__(self):
         load_dotenv()
         self.databasepath =  os.getenv("DATABASENAME")
@@ -30,5 +30,20 @@ class userman:
             cursor.execute('''INSERT INTO users (username, password_hash, email, last_login) VALUES (?, ?, ?, ?)''',
                             (username, hashedpass, email, datetime.now(UTC)))
             return password
-    def log_login(self, username: str) -> bool:
-        return False
+    def get_UID(self, username='', email='') -> int:
+        """
+        given a username it will return the UID of the user.
+        WARNING currently email is not implemented but may be added later
+        """
+        if username == '':
+            raise ValueError
+        elif email != '':
+            raise NotImplementedError
+        else:
+            try:
+                with sqlite3.connect(self.databasepath) as conn:
+                    row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+                    return row[0]
+            except (sqlite3.OperationalError, sqlite3.ProgrammingError, TypeError, IndexError) as err:
+                print(err)
+                raise err
