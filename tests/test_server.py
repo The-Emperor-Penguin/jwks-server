@@ -26,7 +26,8 @@ class ServerTests(unittest.TestCase):
         self.client = server.app.test_client()
 
     def test_auth_default_uses_valid_key(self):
-        response = self.client.post("/auth")
+        response = self.client.post("/register", json={"username": "testuser", "email": "test@example.com"})
+        response = self.client.post("/auth", json={"username": "testuser", "password": response.json["password"]})
         self.assertEqual(response.status_code, 200)
         token = response.json["token"]
 
@@ -43,7 +44,8 @@ class ServerTests(unittest.TestCase):
         self.assertIn(header["kid"], valid_kids)
 
     def test_auth_expired_true_uses_expired_key(self):
-        response = self.client.post("/auth?expired=true")
+        response = self.client.post("/register", json={"username": "testuser2", "email": "test2@example.com"})
+        response = self.client.post("/auth?expired=true", json={"username": "testuser2", "password": response.json["password"]})
         self.assertEqual(response.status_code, 200)
         token = response.json["token"]
 
